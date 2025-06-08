@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+option java_multiple_files = true;
+option java_package = "com.example.grpc";
+option java_outer_classname = "ChatProto";
+
+package chat;
+
+// 聊天服务定义
+service ChatService {
+  // 双向流式RPC
+  rpc Chat(stream ChatMessage) returns (stream ChatMessage) {}
+}
+
+// 聊天消息
+message ChatMessage {
+  string user_id = 1;
+  string content = 2;
+  int64 timestamp = 3;
+} 
