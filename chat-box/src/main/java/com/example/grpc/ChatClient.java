@@ -1,15 +1,27 @@
 package com.example.grpc;
 
 import io.grpc.ManagedChannel;
-import io.grpc.ManagedChannelBuilder;
+import io.grpc.netty.NettyChannelBuilder;
 import io.grpc.stub.StreamObserver;
 
+import io.netty.handler.ssl.SslContext;
+import io.netty.handler.ssl.SslContextBuilder;
+import io.netty.handler.ssl.SslProvider;
+import io.netty.handler.ssl.ApplicationProtocolConfig;
+import io.netty.handler.ssl.ApplicationProtocolNames;
+
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.io.InputStream;
+import java.security.KeyStore;
 import java.util.Scanner;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledFuture;
+import javax.net.ssl.TrustManagerFactory;
 
 public class ChatClient {
     private static final Logger logger = Logger.getLogger(ChatClient.class.getName());
@@ -19,9 +31,35 @@ public class ChatClient {
     private StreamObserver<ChatMessage> requestObserver;
     private ScheduledFuture<?> heartbeatFuture;
 
-    public ChatClient(String host, int port) {
-        channel = ManagedChannelBuilder.forAddress(host, port)
-                .usePlaintext()
+    public ChatClient(String host, int port) throws Exception {
+        // 加载TLS证书
+        String trustStorePath = "certs/server.p12";
+        String trustStorePassword = "password";
+        InputStream is = getClass().getClassLoader().getResourceAsStream(trustStorePath);
+        if (is == null) {
+            throw new FileNotFoundException("证书文件未找到！");
+        }
+        KeyStore ks = KeyStore.getInstance("PKCS12");
+        ks.load(is, trustStorePassword.toCharArray());
+        TrustManagerFactory tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+        tmf.init(ks);
+
+        // 配置ALPN
+        ApplicationProtocolConfig alpnConfig = new ApplicationProtocolConfig(
+            ApplicationProtocolConfig.Protocol.ALPN,
+            ApplicationProtocolConfig.SelectorFailureBehavior.NO_ADVERTISE,
+            ApplicationProtocolConfig.SelectedListenerFailureBehavior.ACCEPT,
+            ApplicationProtocolNames.HTTP_2,
+            ApplicationProtocolNames.HTTP_1_1);
+
+        SslContext sslContext = SslContextBuilder.forClient()
+                .sslProvider(SslProvider.JDK)
+                .trustManager(tmf)
+                .applicationProtocolConfig(alpnConfig)
+                .build();
+
+        channel = NettyChannelBuilder.forAddress(host, port)
+                .sslContext(sslContext)
                 .keepAliveTime(60, TimeUnit.SECONDS)  // 设置 keepalive 时间
                 .keepAliveWithoutCalls(true)        // 允许在没有调用时发送 keepalive
                 .build();

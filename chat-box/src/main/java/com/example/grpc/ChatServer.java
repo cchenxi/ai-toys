@@ -1,12 +1,23 @@
 package com.example.grpc;
 
 import io.grpc.Server;
-import io.grpc.ServerBuilder;
+import io.grpc.netty.NettyServerBuilder;
 import io.grpc.stub.StreamObserver;
 
+import io.netty.handler.ssl.SslContext;
+import io.netty.handler.ssl.SslContextBuilder;
+import io.netty.handler.ssl.SslProvider;
+import io.netty.handler.ssl.ApplicationProtocolConfig;
+import io.netty.handler.ssl.ApplicationProtocolNames;
+
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.io.InputStream;
+import java.security.KeyStore;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
+import javax.net.ssl.KeyManagerFactory;
 
 public class ChatServer {
     private static final Logger logger = Logger.getLogger(ChatServer.class.getName());
@@ -17,12 +28,38 @@ public class ChatServer {
         this.port = port;
     }
 
-    public void start() throws IOException {
-        server = ServerBuilder.forPort(port)
+    public void start() throws Exception {
+        // 加载PKCS12证书
+        String keyStorePath = "certs/server.p12";
+        String keyStorePassword = "password";
+        InputStream is = getClass().getClassLoader().getResourceAsStream(keyStorePath);
+        if (is == null) {
+            throw new FileNotFoundException("证书文件未找到！");
+        }
+        KeyStore ks = KeyStore.getInstance("PKCS12");
+        ks.load(is, keyStorePassword.toCharArray());
+        KeyManagerFactory kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
+        kmf.init(ks, keyStorePassword.toCharArray());
+
+        // 配置ALPN
+        ApplicationProtocolConfig alpnConfig = new ApplicationProtocolConfig(
+            ApplicationProtocolConfig.Protocol.ALPN,
+            ApplicationProtocolConfig.SelectorFailureBehavior.NO_ADVERTISE,
+            ApplicationProtocolConfig.SelectedListenerFailureBehavior.ACCEPT,
+            ApplicationProtocolNames.HTTP_2,
+            ApplicationProtocolNames.HTTP_1_1);
+
+        SslContext sslContext = SslContextBuilder.forServer(kmf)
+                .sslProvider(SslProvider.JDK)
+                .applicationProtocolConfig(alpnConfig)
+                .build();
+
+        server = NettyServerBuilder.forPort(port)
                 .addService(new ChatServiceImpl())
+                .sslContext(sslContext)
                 .build()
                 .start();
-        logger.info("Server started, listening on " + port);
+        logger.info("Server started with TLS, listening on " + port);
 
         Runtime.getRuntime().addShutdownHook(new Thread() {
             @Override
