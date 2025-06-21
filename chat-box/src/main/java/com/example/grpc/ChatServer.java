@@ -9,6 +9,7 @@ import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.SslProvider;
 import io.netty.handler.ssl.ApplicationProtocolConfig;
 import io.netty.handler.ssl.ApplicationProtocolNames;
+import io.netty.handler.ssl.ClientAuth;
 
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
@@ -18,6 +19,7 @@ import java.security.KeyStore;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
 import javax.net.ssl.KeyManagerFactory;
+import javax.net.ssl.TrustManagerFactory;
 
 public class ChatServer {
     private static final Logger logger = Logger.getLogger(ChatServer.class.getName());
@@ -29,17 +31,14 @@ public class ChatServer {
     }
 
     public void start() throws Exception {
-        // 加载PKCS12证书
-        String keyStorePath = "certs/server.p12";
-        String keyStorePassword = "password";
-        InputStream is = getClass().getClassLoader().getResourceAsStream(keyStorePath);
-        if (is == null) {
-            throw new FileNotFoundException("证书文件未找到！");
+        // 加载服务端证书、密钥以及CA证书
+        InputStream serverCertIs = getClass().getClassLoader().getResourceAsStream("certs/server.crt");
+        InputStream serverKeyIs = getClass().getClassLoader().getResourceAsStream("certs/server.key");
+        InputStream caIs = getClass().getClassLoader().getResourceAsStream("certs/ca.crt");
+
+        if (serverCertIs == null || serverKeyIs == null || caIs == null) {
+            throw new FileNotFoundException("必要的证书文件(.crt, .key, ca.crt)未找到，请先运行 generate_certs.sh 脚本。");
         }
-        KeyStore ks = KeyStore.getInstance("PKCS12");
-        ks.load(is, keyStorePassword.toCharArray());
-        KeyManagerFactory kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
-        kmf.init(ks, keyStorePassword.toCharArray());
 
         // 配置ALPN
         ApplicationProtocolConfig alpnConfig = new ApplicationProtocolConfig(
@@ -49,8 +48,10 @@ public class ChatServer {
             ApplicationProtocolNames.HTTP_2,
             ApplicationProtocolNames.HTTP_1_1);
 
-        SslContext sslContext = SslContextBuilder.forServer(kmf)
+        SslContext sslContext = SslContextBuilder.forServer(serverCertIs, serverKeyIs)
                 .sslProvider(SslProvider.JDK)
+                .trustManager(caIs) // 使用CA证书来验证客户端
+                .clientAuth(ClientAuth.REQUIRE) // 强制要求客户端认证
                 .applicationProtocolConfig(alpnConfig)
                 .build();
 
