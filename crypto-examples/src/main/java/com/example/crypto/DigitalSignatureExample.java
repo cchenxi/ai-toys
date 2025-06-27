@@ -56,6 +56,7 @@ public class DigitalSignatureExample {
 
     public static void main(String[] args) throws Exception {
         // 1. Generate a key pair
+        // 1. 生成密钥对
         KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance("RSA");
         keyPairGenerator.initialize(2048);
         KeyPair keyPair = keyPairGenerator.generateKeyPair();
@@ -63,20 +64,24 @@ public class DigitalSignatureExample {
         PrivateKey privateKey = keyPair.getPrivate();
 
         // 2. Define the data to be signed
+        // 2. 定义要签名的数据
         String originalMessage = "This message will be signed to ensure its integrity.";
         System.out.println("Original Message: " + originalMessage);
 
         // 3. Sign the data with the private key
+        // 3. 使用私钥对数据进行签名
         String signature = sign(originalMessage, privateKey);
         System.out.println("Signature (Base64): " + signature);
 
         // 4. Verify the signature with the public key
+        // 4. 使用公钥验证签名
         boolean isSignatureValid = verify(originalMessage, signature, publicKey);
         System.out.println("\nVerification with original data: " + isSignatureValid);
 
         // 5. Attempt to verify with tampered data (demonstrates failure)
+        // 5. 尝试使用被篡改的数据验证签名（演示验证失败）
         String tamperedMessage = "This message has been tampered with!";
         boolean isTamperedSignatureValid = verify(tamperedMessage, signature, publicKey);
         System.out.println("Verification with tampered data: " + isTamperedSignatureValid);
     }
-} 
+}
